@@ -39,6 +39,10 @@ module JRubyDockerfile
     "#{jruby_version}-#{tag}"
   end
 
+  def docker_hub_user_image_name_tag
+    "fidothe/jruby:#{docker_image_tag}"
+  end
+
   def sha_url
     "#{download_url}.#{sha_algo}"
   end
@@ -164,18 +168,55 @@ class JRubyNightlyDockerfile
   end
 end
 
-STABLE_VARIANTS = JRubyStableDockerfile.variants(JRUBY_VERSIONS, JVM_VERSIONS)
-NIGHTLY_VARIANTS = JRubyNightlyDockerfile.variants(JRUBY_NIGHTLY, JVM_VERSIONS)
-VARIANTS = STABLE_VARIANTS + NIGHTLY_VARIANTS
+class CircleCIDockerfile
+  attr_reader :jruby_image_variant, :docker_hub_image_id
 
-namespace :jruby do
-  desc "Remove all generated JRuby Dockerfiles"
-  task :clean do
-    rm_rf JRUBY_VERSIONS.map { |v, _| "jruby/#{v}" } << "jruby/#{JRUBY_NIGHTLY}"
+  def initialize(jruby_image_variant, docker_hub_image_id)
+    @jruby_image_variant, @docker_hub_image_id = jruby_image_variant, docker_hub_image_id
+  end
+
+  def docker_image_tag
+    "jruby-#{jruby_image_variant}"
+  end
+
+  def docker_image_name_tag
+    "circleci:#{docker_image_tag}"
+  end
+
+  def docker_hub_user_image_name_tag
+    "fidothe/#{docker_image_name_tag}"
+  end
+
+  def image_dir
+    Pathname.new("circleci/#{docker_image_tag}")
+  end
+
+  def dockerfile_path
+    image_dir.join('Dockerfile')
+  end
+
+  def template
+    @template ||= ERB.new(File.read('circleci/Dockerfile.erb', encoding: 'utf-8'))
+  end
+
+  def dockerfile_contents
+    template.result_with_hash({
+      from_image: docker_hub_image_id
+    })
+  end
+
+  def write_dockerfile
+    dockerfile_path.open('w:utf-8') do |f|
+      f.write(dockerfile_contents)
+    end
   end
 end
 
-VARIANTS.each do |variant|
+STABLE_JRUBY_VARIANTS = JRubyStableDockerfile.variants(JRUBY_VERSIONS, JVM_VERSIONS)
+NIGHTLY_JRUBY_VARIANTS = JRubyNightlyDockerfile.variants(JRUBY_NIGHTLY, JVM_VERSIONS)
+JRUBY_VARIANTS = STABLE_JRUBY_VARIANTS + NIGHTLY_JRUBY_VARIANTS
+
+JRUBY_VARIANTS.each do |variant|
   directory variant.variant_dir
   desc "Generate Dockerfile for #{variant.docker_image_tag}"
   file variant.dockerfile_path => [variant.variant_dir, 'jruby/Dockerfile.erb'] do
@@ -184,23 +225,68 @@ VARIANTS.each do |variant|
 
   desc "Build Docker image for jruby:#{variant.docker_image_tag}"
   task "jruby:#{variant.docker_image_tag}:build" => variant.dockerfile_path do
-    sh %{docker build -t fidothe/jruby:#{variant.docker_image_tag} "#{variant.variant_dir}"}
+    sh %{docker build -t #{variant.docker_hub_user_image_name_tag} "#{variant.variant_dir}"}
   end
 
   desc "Push built Docker image for jruby:#{variant.docker_image_tag} to Docker Hub"
   task "jruby:#{variant.docker_image_tag}:push" => "jruby:#{variant.docker_image_tag}:build" do
-    sh "docker push fidothe/jruby:#{variant.docker_image_tag}"
+    sh "docker push #{variant.docker_hub_user_image_name_tag}"
+  end
+end
+
+CIRCLECI_VARIANTS = JRUBY_VARIANTS.map { |variant|
+  CircleCIDockerfile.new(variant.docker_image_tag, variant.docker_hub_user_image_name_tag)
+}
+CIRCLECI_VARIANTS.each do |circleci_variant|
+  directory circleci_variant.image_dir
+
+  desc "Generate Dockerfile for #{circleci_variant.jruby_image_variant}"
+  file circleci_variant.dockerfile_path => [circleci_variant.image_dir, 'circleci/Dockerfile.erb'] do
+    circleci_variant.write_dockerfile
+  end
+
+  desc "Build Docker image for #{circleci_variant.docker_image_name_tag}"
+  task "circleci:#{circleci_variant.docker_image_tag}:build" => circleci_variant.dockerfile_path do
+    sh %{docker build -t #{circleci_variant.docker_hub_user_image_name_tag} "#{circleci_variant.variant_dir}"}
+  end
+
+  desc "Push built Docker image for #{circleci_variant.docker_image_name_tag} to Docker Hub"
+  task "circleci:#{circleci_variant.docker_image_tag}:push" => "circleci:#{circleci_variant.docker_image_tag}:build" do
+    sh "docker push #{circleci_variant.docker_hub_user_image_name_tag}"
   end
 end
 
 desc "Generate all Dockerfiles for JRuby"
-task :jruby => VARIANTS.map(&:dockerfile_path)
+task :jruby => JRUBY_VARIANTS.map(&:dockerfile_path)
 
-desc "Build all Docker images for JRuby"
-task "jruby:build" => VARIANTS.map { |variant| "jruby:#{variant.docker_image_tag}:build" }
+namespace :jruby do
+  desc "Remove all generated JRuby Dockerfiles"
+  task :clean do
+    rm_rf JRUBY_VERSIONS.map { |v, _| "jruby/#{v}" } << "jruby/#{JRUBY_NIGHTLY}"
+  end
 
-desc "Push all Docker images for JRuby"
-task "jruby:push" => VARIANTS.map { |variant| "jruby:#{variant.docker_image_tag}:push" }
+  desc "Build all Docker images for JRuby"
+  task :build => JRUBY_VARIANTS.map { |variant| "jruby:#{variant.docker_image_tag}:build" }
+
+  desc "Push all Docker images for JRuby"
+  task :push => JRUBY_VARIANTS.map { |variant| "jruby:#{variant.docker_image_tag}:push" }
+end
+
+desc "Generate all Dockerfiles for JRuby"
+task :circleci => CIRCLECI_VARIANTS.map(&:dockerfile_path)
+
+namespace :circleci do
+  desc "Remove all generated JRuby Dockerfiles"
+  task :clean do
+    rm_rf Dir.glob("circleci/jruby-*")
+  end
+
+  desc "Build all Docker images for JRuby"
+  task :build => CIRCLECI_VARIANTS.map { |variant| "circleci:#{variant.docker_image_tag}:build" }
+
+  desc "Push all Docker images for JRuby"
+  task :push => CIRCLECI_VARIANTS.map { |variant| "circleci:#{variant.docker_image_tag}:push" }
+end
 
 desc "Remove all generated Dockerfiles"
 task :clean => "jruby:clean"

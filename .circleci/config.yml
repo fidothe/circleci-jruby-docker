@@ -15,9 +15,24 @@ jobs:
           name: Build and push JRuby Docker images
           command: |
             rake jruby:push
+  build_circleci_images:
+    docker:
+      - image: fidothe/docker:stable-git-rake
+    steps:
+      - checkout
+      - setup_remote_docker
+      - run:
+          name: Setup Docker Hub credentials
+          command: |
+            echo "$DOCKER_PASSWORD" | docker login --username $DOCKER_USER --password-stdin
+      - run:
+          name: Build and push JRuby Docker images
+          command: |
+            rake circleci:push
 
 workflows:
   version: 2
   jruby:
     jobs:
       - build_jruby_images
+      - build_circleci_images
