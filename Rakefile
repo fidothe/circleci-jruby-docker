@@ -247,7 +247,7 @@ CIRCLECI_VARIANTS.each do |circleci_variant|
 
   desc "Build Docker image for #{circleci_variant.docker_image_name_tag}"
   task "circleci:#{circleci_variant.docker_image_tag}:build" => circleci_variant.dockerfile_path do
-    sh %{docker build -t #{circleci_variant.docker_hub_user_image_name_tag} "#{circleci_variant.variant_dir}"}
+    sh %{docker build -t #{circleci_variant.docker_hub_user_image_name_tag} "#{circleci_variant.image_dir}"}
   end
 
   desc "Push built Docker image for #{circleci_variant.docker_image_name_tag} to Docker Hub"
