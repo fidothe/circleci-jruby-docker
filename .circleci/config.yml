@@ -3,7 +3,7 @@ version: 2
 jobs:
   build_jruby_images:
     docker:
-      fidothe/docker:stable-git-rake
+      - image: fidothe/docker:stable-git-rake
     steps:
       - checkout
       - setup_remote_docker
