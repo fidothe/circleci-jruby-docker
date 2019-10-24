@@ -35,12 +35,30 @@ module JRubyDockerfile
     raise NotImplementedError
   end
 
+  def latest_snapshot
+    raise NotImplementedError
+  end
+
   def docker_image_tag
     "#{jruby_version}-#{tag}"
   end
 
-  def docker_hub_user_image_name_tag
-    "fidothe/jruby:#{docker_image_tag}"
+  def docker_hub_user_image_name_tag(tag = docker_image_tag)
+    "fidothe/jruby:#{tag}"
+  end
+
+  def extra_docker_image_tags
+    []
+  end
+
+  def extra_docker_hub_user_image_name_tags
+    extra_docker_image_tags.map { |t| docker_hub_user_image_name_tag(t) }
+  end
+
+  def all_variants
+    extra_docker_image_tags.map { |t|
+      [t, docker_hub_user_image_name_tag(t)]
+     } << [docker_image_tag, docker_hub_user_image_name_tag]
   end
 
   def sha_url
@@ -143,6 +161,10 @@ class JRubyNightlyDockerfile
     "#{snapshot_tag}-#{jvm_version}"
   end
 
+  def extra_docker_image_tags
+    ["#{jruby_version}-latest-#{jvm_version}"]
+  end
+
   private
 
   def url_base
@@ -231,11 +253,16 @@ JRUBY_VARIANTS.each do |variant|
   desc "Push built Docker image for jruby:#{variant.docker_image_tag} to Docker Hub"
   task "jruby:#{variant.docker_image_tag}:push" => "jruby:#{variant.docker_image_tag}:build" do
     sh "docker push #{variant.docker_hub_user_image_name_tag}"
+    variant.extra_docker_hub_user_image_name_tags.each do |extra_docker_hub_user_image_name_tag|
+      sh %{docker tag #{variant.docker_hub_user_image_name_tag} #{extra_docker_hub_user_image_name_tag}}
+    end
   end
 end
 
-CIRCLECI_VARIANTS = JRUBY_VARIANTS.map { |variant|
-  CircleCIDockerfile.new(variant.docker_image_tag, variant.docker_hub_user_image_name_tag)
+CIRCLECI_VARIANTS = JRUBY_VARIANTS.flat_map { |variant|
+  variant.all_variants.map { |docker_image_tag, docker_hub_user_image_name_tag|
+    CircleCIDockerfile.new(docker_image_tag, docker_hub_user_image_name_tag)
+  }
 }
 CIRCLECI_VARIANTS.each do |circleci_variant|
   directory circleci_variant.image_dir
@@ -253,6 +280,9 @@ CIRCLECI_VARIANTS.each do |circleci_variant|
   desc "Push built Docker image for #{circleci_variant.docker_image_name_tag} to Docker Hub"
   task "circleci:#{circleci_variant.docker_image_tag}:push" => "circleci:#{circleci_variant.docker_image_tag}:build" do
     sh "docker push #{circleci_variant.docker_hub_user_image_name_tag}"
+    circleci_variant.extra_docker_hub_user_image_name_tags.each do |extra_docker_hub_user_image_name_tag|
+      sh %{docker tag #{circleci_variant.docker_hub_user_image_name_tag} #{extra_docker_hub_user_image_name_tag}}
+    end
   end
 end
 
