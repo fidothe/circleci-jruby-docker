@@ -35,4 +35,6 @@ workflows:
   jruby:
     jobs:
       - build_jruby_images
-      - build_circleci_images
+      - build_circleci_images:
+          requires:
+            - build_jruby_images
