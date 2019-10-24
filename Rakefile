@@ -280,9 +280,6 @@ CIRCLECI_VARIANTS.each do |circleci_variant|
   desc "Push built Docker image for #{circleci_variant.docker_image_name_tag} to Docker Hub"
   task "circleci:#{circleci_variant.docker_image_tag}:push" => "circleci:#{circleci_variant.docker_image_tag}:build" do
     sh "docker push #{circleci_variant.docker_hub_user_image_name_tag}"
-    circleci_variant.extra_docker_hub_user_image_name_tags.each do |extra_docker_hub_user_image_name_tag|
-      sh %{docker tag #{circleci_variant.docker_hub_user_image_name_tag} #{extra_docker_hub_user_image_name_tag}}
-    end
   end
 end
 
