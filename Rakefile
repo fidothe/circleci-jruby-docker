@@ -254,7 +254,8 @@ JRUBY_VARIANTS.each do |variant|
   task "jruby:#{variant.docker_image_tag}:push" => "jruby:#{variant.docker_image_tag}:build" do
     sh "docker push #{variant.docker_hub_user_image_name_tag}"
     variant.extra_docker_hub_user_image_name_tags.each do |extra_docker_hub_user_image_name_tag|
-      sh %{docker tag #{variant.docker_hub_user_image_name_tag} #{extra_docker_hub_user_image_name_tag}}
+      sh "docker tag #{variant.docker_hub_user_image_name_tag} #{extra_docker_hub_user_image_name_tag}"
+      sh "docker push #{extra_docker_hub_user_image_name_tag}"
     end
   end
 end
