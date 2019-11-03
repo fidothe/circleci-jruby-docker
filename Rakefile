@@ -3,8 +3,8 @@ require 'pathname'
 require 'open-uri'
 require 'date'
 
-JRUBY_VERSIONS = %w{9.1.17.0 9.2.8.0}
-JRUBY_NIGHTLY = %{9.2.9.0-SNAPSHOT}
+JRUBY_VERSIONS = %w{9.1.17.0 9.2.9.0}
+JRUBY_NIGHTLY = %{9.2.10.0-SNAPSHOT}
 JVM_VERSIONS = %w{8-jdk-slim 11-jdk-slim 13-jdk-slim}
 
 module JRubyDockerfile
